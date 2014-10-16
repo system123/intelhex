@@ -82,6 +82,9 @@ module IntelHex
         @eof = true
       when "EXTENDED_SEGMENT_ADDRESS"
         @base_address = line.data_as_integer << 4
+      when "START_SEGMENT_ADDRESS"
+        @register_cs = line.data[0]
+        @register_ip = line.data[1]
       else
         raise("Unhandled line type: #{line.to_s}")
       end
@@ -135,8 +138,8 @@ module IntelHex
       data.pack("C*")
     end
 
-    def data_as_hex
-      data.map { |byte| "%02X" % byte }.join
+    def data_as_hex(separator = "")
+      data.map { |byte| "%02X" % byte }.join(separator)
     end
 
     def data_as_integer
@@ -159,26 +162,22 @@ module IntelHex
     end
 
     def to_s
-      "%02d: %s\t\t%s: %d bytes from 0x%04X: %s" % [
+      "%04d: %s: %d bytes from 0x%04X: %s%s" % [
         number,
-        to_str("-"),
         type_name,
         size,
         address,
-        data_as_hex,
+        data_as_hex(" "),
+        valid? ? "" : " (INVALID CHECKSUM)",
       ]
     end
 
-    def to_str(separator = "")
-      ":%02X%s%04X%s%02X%s%s%s%02X" % [
+    def to_str
+      ":%02X%04X%02X%s%02X" % [
         size,
-        separator,
         address,
-        separator,
         type,
-        separator,
         data_as_hex,
-        separator,
         checksum,
       ]
     end
@@ -208,6 +207,13 @@ module IntelHex
 end
 
 if $0 == __FILE__
-  # Read hex (ASCII) from stdin, write binary to stdout.
-  IntelHex::Hex.new($stdin).binary.dump($stdout)
+  case ARGV[0]
+  when "explain"
+    IntelHex::Hex.new($stdin).each_line do |line|
+      puts line.to_s
+    end
+  else
+    # Read hex (ASCII) from stdin, write binary to stdout.
+    IntelHex::Hex.new($stdin).binary.dump($stdout)
+  end
 end
