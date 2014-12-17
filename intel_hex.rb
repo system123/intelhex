@@ -8,6 +8,9 @@
 #
 # Author: Paul Annesley
 # License: MIT (open source)
+#
+#
+# Modified by Lloyd Hughes to support 32bit addressing and ensuring everything starts at 0x000 in the bin file
 
 module IntelHex
 
@@ -42,6 +45,7 @@ module IntelHex
     # reader: IntelHex::Hex instance.
     def initialize(reader)
       @base_address = 0x0000
+      @block_start_addr = 0xFFFFFFFF # Used to shift the block to the start of the file
       @buffer = nil
       @eof = false
       @reader = reader
@@ -56,6 +60,7 @@ module IntelHex
       io = to_io
       io.rewind
       output.write(io.read)
+      output.close
     end
 
     private
@@ -76,7 +81,14 @@ module IntelHex
     def handle_line(line)
       case line.type_name
       when "DATA"
-        @buffer.seek(resolve_address(line.address))
+        current_addr = resolve_address(line.address)
+
+        if (@block_start_addr == 0xFFFFFFFF)
+          @block_start_addr = current_addr
+          p "Start Address: 0x#{@block_start_addr.to_s(16)}"
+        end
+
+        @buffer.seek(current_addr - @block_start_addr)
         @buffer.write(line.data_as_binary)
       when "EOF"
         @eof = true
@@ -85,6 +97,11 @@ module IntelHex
       when "START_SEGMENT_ADDRESS"
         @register_cs = line.data[0]
         @register_ip = line.data[1]
+      when "EXTENDED_LINEAR_ADDRESS"
+        @base_address = (line.data[0] << 8) + line.data[1]
+        @base_address = (@base_address << 16)
+      when "START_LINEAR_ADDRESS"
+        # @register_eip = line.data_as_integer & 0xFFFFFFFF
       else
         raise("Unhandled line type: #{line.to_s}")
       end
